@@ -123,3 +123,54 @@ test("guardDirectories denies native file tools inside private directories only"
   assert.equal(await at("read", "relative/path"), "allow")
   assert.equal(await at("shell", join(dir, "vault.key")), "allow", "shell is not intercepted (documented limit)")
 })
+
+/** A pushable event stream like OpenCode's event.subscribe. */
+function eventStream() {
+  const queue: unknown[] = []
+  let wake: (() => void) | undefined
+  let subscriptions = 0
+  return {
+    push(event: unknown) { queue.push(event); wake?.() },
+    get subscriptions() { return subscriptions },
+    host: {
+      subscribe({ signal }: { types: string[]; signal: AbortSignal }) {
+        subscriptions++
+        return (async function* () {
+          while (!signal.aborted) {
+            while (queue.length) yield queue.shift() as never
+            await new Promise<void>(resolve => { wake = resolve; signal.addEventListener("abort", () => resolve(), { once: true }) })
+          }
+        })()
+      },
+    },
+  }
+}
+const settle = () => new Promise(resolve => setTimeout(resolve, 20))
+
+test("'Allow always' on the native prompt sets the asking agent's cells to allow", async () => {
+  const { policy, bridge } = await setup()
+  const events = eventStream()
+  const registration = bridge.followReplies(events.host)
+  events.push({ type: "permission.asked", data: { id: "p1", sessionID: "root", action: "oc-test.use", resources: ["env:A", "env:B"], metadata: { agent: "build" } } })
+  events.push({ type: "permission.replied", data: { sessionID: "root", requestID: "p1", reply: "always" } })
+  await settle()
+  for (const entity of ["env:A", "env:B"]) assert.deepEqual(await policy.resolve({ entity, capability: "use", agent: "build" }), { effect: "allow", source: "agent" })
+  assert.equal((await policy.resolve({ entity: "env:A", capability: "use", agent: "plan" })).source, "default", "other agents unaffected")
+
+  events.push({ type: "permission.asked", data: { id: "p2", sessionID: "root", action: "oc-test.sudo", resources: ["web"], metadata: { agent: "build" } } })
+  events.push({ type: "permission.replied", data: { sessionID: "root", requestID: "p2", reply: "once" } })
+  events.push({ type: "permission.asked", data: { id: "p3", sessionID: "root", action: "read", resources: ["x"] } })
+  events.push({ type: "permission.replied", data: { sessionID: "root", requestID: "p3", reply: "always" } })
+  await settle()
+  assert.equal((await policy.resolve({ entity: "web", capability: "sudo", agent: "build" })).source, "default", "once does not change the table")
+  assert.equal(Object.keys(policy.snapshot().entities).sort().join(), "env:A,env:B", "other plugins' and native prompts are ignored")
+  await registration.dispose()
+})
+
+test("prompts carry the agent so 'Allow always' knows the row", async () => {
+  const { bridge } = await setup()
+  const { host, prompts } = fakeHost()
+  await bridge.install(host)
+  await bridge.check({ sessionID: "root", agent: "plan", capability: "ssh", entities: ["web"], metadata: { command: "ssh web" } })
+  assert.deepEqual(prompts[0]!.metadata, { command: "ssh web", agent: "plan" })
+})

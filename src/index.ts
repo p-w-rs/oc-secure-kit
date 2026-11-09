@@ -1,10 +1,10 @@
 /** Version of the secure-kit API, so plugins can report which vendored copy they run. */
-export const SECURE_KIT_VERSION = "0.3.0"
+export const SECURE_KIT_VERSION = "0.4.0"
 
 export { BUNDLE_FORMAT, DEFAULT_COST, MIN_PASSPHRASE_LENGTH, decryptBundle, diffRecords, encryptBundle, inspectBundle } from "./bundle.js"
 export type { BundleEnvelope, BundleHeader, DiffItem, DiffStatus, KdfParams, Migrations } from "./bundle.js"
 export { PermissionBridge, guardDirectories, sessionRoots } from "./bridge.js"
-export type { AssertInput, CheckInput, EvaluateEvent, ParentLookup, PermissionHost, Registration } from "./bridge.js"
+export type { AssertInput, CheckInput, EvaluateEvent, EventHost, ParentLookup, PermissionEvent, PermissionHost, Registration } from "./bridge.js"
 export { Serial, atomicWrite, ensurePrivateDir, pluginDataDir, readJson, withFileLock } from "./fsutil.js"
 export { EFFECTS, POLICY_FORMAT, PolicyStore, StaleRevisionError, combineEffects, resolveEffect } from "./policy.js"
 export type { AgentRows, CellChange, Effect, EntityPolicy, PolicyDoc, Resolution, ResolveInput, Row, SessionOverride } from "./policy.js"

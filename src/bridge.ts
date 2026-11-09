@@ -22,6 +22,14 @@ export interface AssertInput {
   source?: { type: "tool"; messageID: string; id: string }
 }
 export interface Registration { dispose(): Promise<void> }
+/** The two native permission events the bridge follows (structural subset of OpenCode's event stream). */
+export type PermissionEvent =
+  | { type: "permission.asked"; data: { id: string; sessionID: string; action: string; resources: ReadonlyArray<string>; metadata?: Record<string, unknown> } }
+  | { type: "permission.replied"; data: { sessionID: string; requestID: string; reply: "once" | "always" | "reject" } }
+  | { type: string; data?: unknown }
+export interface EventHost {
+  subscribe(options: { types: string[]; signal: AbortSignal }): AsyncIterable<PermissionEvent>
+}
 export interface PermissionHost {
   assert(input: AssertInput): Promise<void>
   hook(name: "evaluate", callback: (event: EvaluateEvent) => Promise<void> | void): Promise<Registration>
@@ -105,11 +113,49 @@ export class PermissionBridge {
       ...(input.agent ? { agent: input.agent } : {}),
       action: this.action(input.capability),
       resources: [...input.entities],
-      // "Always allow" on the native prompt would be overridden by the table anyway; change the table instead.
+      // Native rules are not saved: "Allow always" is written to the table instead (see followReplies).
       save: [],
-      ...(input.metadata ? { metadata: input.metadata } : {}),
+      // The asked event carries no agent; keep it here so "Allow always" can update that agent's row.
+      metadata: { ...input.metadata, ...(input.agent ? { agent: input.agent } : {}) },
       ...(input.source ? { source: input.source } : {}),
     })
+  }
+
+  /**
+   * Makes "Allow always" on the native prompt for this plugin's actions set the table cell to allow, in the asking
+   * agent's row (the any-agent row when the agent is unknown). Never throws; reconnects if the stream ends.
+   */
+  followReplies(events: EventHost, onError?: (error: unknown) => void): Registration {
+    const controller = new AbortController()
+    const prefix = `${this.plugin}.`
+    const asked = new Map<string, { capability: string; resources: string[]; agent: string }>()
+    const loop = async () => {
+      while (!controller.signal.aborted) {
+        try {
+          for await (const event of events.subscribe({ types: ["permission.asked", "permission.replied"], signal: controller.signal })) {
+            if (event.type === "permission.asked") {
+              const data = (event as Extract<PermissionEvent, { type: "permission.asked" }>).data
+              if (!data?.action?.startsWith(prefix)) continue
+              const agent = typeof data.metadata?.agent === "string" && data.metadata.agent ? data.metadata.agent : "*"
+              asked.set(data.id, { capability: data.action.slice(prefix.length), resources: [...data.resources], agent })
+              if (asked.size > 1000) asked.delete(asked.keys().next().value!)
+            } else if (event.type === "permission.replied") {
+              const data = (event as Extract<PermissionEvent, { type: "permission.replied" }>).data
+              const request = data && asked.get(data.requestID)
+              if (!request) continue
+              asked.delete(data.requestID)
+              if (data.reply !== "always") continue
+              try {
+                await this.#policy.setCells(request.resources.map(entity => ({ entity, row: { agent: request.agent }, capability: request.capability, effect: "allow" as const })))
+              } catch (error) { onError?.(error) }
+            }
+          }
+        } catch (error) { if (!controller.signal.aborted) onError?.(error) }
+        if (!controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    }
+    void loop()
+    return { dispose: async () => { controller.abort() } }
   }
 
   async install(host: PermissionHost): Promise<Registration> {
