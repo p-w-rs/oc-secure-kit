@@ -1,5 +1,5 @@
 /** Version of the secure-kit API, so plugins can report which vendored copy they run. */
-export const SECURE_KIT_VERSION = "0.4.1"
+export const SECURE_KIT_VERSION = "0.5.0"
 
 export { BUNDLE_FORMAT, DEFAULT_COST, MIN_PASSPHRASE_LENGTH, decryptBundle, diffRecords, encryptBundle, inspectBundle } from "./bundle.js"
 export type { BundleEnvelope, BundleHeader, DiffItem, DiffStatus, KdfParams, Migrations } from "./bundle.js"
@@ -11,6 +11,9 @@ export type { AgentRows, CellChange, Effect, EntityPolicy, PolicyDoc, Resolution
 export { MIN_SECRET_LENGTH, Redactor, installRedaction, patternsFor } from "./redact.js"
 export type { Pattern, ToolHookHost } from "./redact.js"
 export { SecretRequests, cleanText } from "./requests.js"
+export { RUN_DIR_GRACE_MS, RunDir } from "./rundir.js"
+export { SHELL_TOOLS, ShellSupplier, appendNote, exitCode } from "./shell.js"
+export type { ShellCaller, ShellSupplierOptions, Supply } from "./shell.js"
 export type { SecretRequest } from "./requests.js"
 export { MAX_SECRET_BYTES, VAULT_FORMAT, Vault, fileKey, memoryKey, validName } from "./vault.js"
 export type { KeySource, SecretMeta, SecretValue } from "./vault.js"
