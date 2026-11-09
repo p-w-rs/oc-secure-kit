@@ -54,14 +54,37 @@ test("redactDeep walks plain objects and arrays only", () => {
   assert.deepEqual(result, { output: "x [REDACTED:web/sudo]", list: ["[REDACTED:web/sudo]", 3, null], nested: { date, ok: true } })
 })
 
-test("installRedaction rewrites completed results and error messages", async () => {
-  const r = make()
+async function capture(r: Redactor, tools: Parameters<typeof installRedaction>[2], onError?: (e: unknown) => void) {
   let hook: ((event: any) => void | Promise<void>) | undefined
-  await installRedaction({ hook: async (_name, callback) => { hook = callback; return { dispose: async () => {} } } }, r)
-  const done = { status: "completed" as const, result: { output: `token ${SECRET}`, metadata: { exit: 0 } } }
-  await hook!(done)
+  await installRedaction({ hook: async (_name, callback) => { hook = callback; return { dispose: async () => {} } } }, r, tools, onError)
+  return hook!
+}
+
+test("installRedaction rewrites the plugin's own tool results and errors", async () => {
+  const hook = await capture(make(), new Set(["machine_exec"]))
+  const done = { tool: "machine_exec", status: "completed" as const, result: { output: `token ${SECRET}`, metadata: { exit: 0 } } }
+  await hook(done)
   assert.deepEqual(done.result, { output: "token [REDACTED:web/sudo]", metadata: { exit: 0 } })
-  const failed = { status: "error" as const, error: new Error(`failed with ${SECRET}`) }
-  await hook!(failed)
+  const failed = { tool: "machine_exec", status: "error" as const, error: new Error(`failed with ${SECRET}`) }
+  await hook(failed)
   assert.equal(failed.error.message, "failed with [REDACTED:web/sudo]")
+})
+
+test("native tool output is untouched unless redaction of all tools is opted in", async () => {
+  const native = () => ({ tool: "read", status: "completed" as const, result: { output: `GH_TOKEN=${SECRET}` } })
+  const scoped = native()
+  await (await capture(make(), new Set(["machine_exec"])))(scoped)
+  assert.equal(scoped.result.output, `GH_TOKEN=${SECRET}`)
+  const all = native()
+  await (await capture(make(), "all"))(all)
+  assert.equal(all.result.output, "GH_TOKEN=[REDACTED:web/sudo]")
+})
+
+test("installRedaction never throws into the host", async () => {
+  const errors: unknown[] = []
+  const hook = await capture(make(), () => { throw new Error("boom") }, error => errors.push(error))
+  const event = { tool: "x", status: "completed" as const, result: { output: SECRET } }
+  await hook(event)
+  assert.equal(event.result.output, SECRET)
+  assert.equal(errors.length, 1)
 })

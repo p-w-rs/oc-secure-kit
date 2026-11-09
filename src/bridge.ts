@@ -138,8 +138,9 @@ export class PermissionBridge {
 const FILE_ACTIONS = new Set(["read", "edit", "write", "external_directory", "grep", "glob", "list"])
 
 /**
- * Denies native file tools inside plugin-private directories (vault, key, policy). Best-effort: it matches the
- * lexical paths the host reports, so it does not cover shell commands, symlinks, or searches of a parent directory.
+ * Opt-in: denies native file tools inside plugin-private directories (vault, key, policy). This changes native
+ * behavior, so plugins enable it only on request. Best-effort: it matches the lexical paths the host reports, so it
+ * does not cover shell commands, symlinks, or searches of a parent directory. Never throws.
  */
 export async function guardDirectories(host: Pick<PermissionHost, "hook">, plugin: string, directories: readonly string[]): Promise<Registration> {
   const roots = directories.map(dir => resolve(dir))
@@ -149,8 +150,10 @@ export async function guardDirectories(host: Pick<PermissionHost, "hook">, plugi
     return roots.some(root => path === root || path.startsWith(root + sep))
   }
   return host.hook("evaluate", event => {
-    if (!FILE_ACTIONS.has(event.action) || !event.resources.some(inside)) return
-    event.effect = "deny"
-    event.message = `${plugin} keeps secrets in this directory; native file tools may not access it.`
+    try {
+      if (!FILE_ACTIONS.has(event.action) || !event.resources.some(inside)) return
+      event.effect = "deny"
+      event.message = `${plugin} keeps secrets in this directory; native file tools may not access it.`
+    } catch {}
   })
 }

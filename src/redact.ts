@@ -80,6 +80,7 @@ export class Redactor {
 }
 
 interface AfterEvent {
+  readonly tool: string
   readonly status: "completed" | "error"
   result?: unknown
   error?: unknown
@@ -88,16 +89,28 @@ export interface ToolHookHost {
   hook(name: "execute.after", callback: (event: AfterEvent) => Promise<void> | void): Promise<{ dispose(): Promise<void> }>
 }
 
-/** Masks registered secrets in every tool's result (including native shell output) before the model sees it. */
-export function installRedaction(tool: ToolHookHost, redactor: Redactor): Promise<{ dispose(): Promise<void> }> {
+/**
+ * Masks registered secrets in tool results before the model sees them. `tools` selects which tools: pass the plugin's
+ * own tool names (the default policy), or `"all"` to include native tools, which changes native output and is opt-in.
+ * Never throws: a failure leaves the result unchanged.
+ */
+export function installRedaction(
+  tool: ToolHookHost,
+  redactor: Redactor,
+  tools: "all" | ReadonlySet<string> | ((name: string) => boolean),
+  onError?: (error: unknown) => void,
+): Promise<{ dispose(): Promise<void> }> {
+  const selected = tools === "all" ? () => true : typeof tools === "function" ? tools : (name: string) => tools.has(name)
   return tool.hook("execute.after", event => {
-    if (!redactor.size) return
-    if (event.status === "completed") event.result = redactor.redactDeep(event.result)
-    else if (event.error instanceof Error) {
-      const masked = redactor.redact(event.error.message)
-      if (masked !== event.error.message) {
-        try { event.error.message = masked } catch { event.error = Object.assign(new Error(masked), { name: event.error.name }) }
+    try {
+      if (!redactor.size || !selected(event.tool)) return
+      if (event.status === "completed") event.result = redactor.redactDeep(event.result)
+      else if (event.error instanceof Error) {
+        const masked = redactor.redact(event.error.message)
+        if (masked !== event.error.message) {
+          try { event.error.message = masked } catch { event.error = Object.assign(new Error(masked), { name: event.error.name }) }
+        }
       }
-    }
+    } catch (error) { onError?.(error) }
   })
 }
