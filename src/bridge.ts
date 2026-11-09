@@ -79,6 +79,7 @@ export class PermissionBridge {
   readonly #policy: PolicyStore
   readonly #root: (sessionID: string) => Promise<string>
   readonly #fallback: (capability: string) => Effect
+  readonly #parent: (entity: string) => string | undefined
   #host?: PermissionHost
 
   constructor(options: {
@@ -87,21 +88,31 @@ export class PermissionBridge {
     root: (sessionID: string) => Promise<string>
     /** Effect when no row sets a cell. Defaults to `ask`. */
     fallback?: (capability: string) => Effect
+    /** An entity whose unset cells inherit from another (e.g. `account@org` -> `account`). */
+    parent?: (entity: string) => string | undefined
   }) {
     this.plugin = validName("plugin", options.plugin)
     this.#policy = options.policy
     this.#root = options.root
     this.#fallback = options.fallback ?? (() => "ask")
+    this.#parent = options.parent ?? (() => undefined)
   }
 
   action(capability: string): string { return `${this.plugin}.${validName("capability", capability)}` }
 
   /** The table's decision without prompting (e.g. to decide what to show or inject). */
   async effect(input: { sessionID: string; agent?: string; capability: string; entity: string }): Promise<Resolution> {
-    return this.#policy.resolve({
-      entity: input.entity, capability: input.capability, agent: input.agent,
-      sessionRoot: await this.#root(input.sessionID), fallback: this.#fallback(input.capability),
-    })
+    const sessionRoot = await this.#root(input.sessionID)
+    const seen = new Set<string>()
+    let entity: string | undefined = input.entity
+    let resolution: Resolution | undefined
+    while (entity && !seen.has(entity) && seen.size < 8) {
+      seen.add(entity)
+      resolution = await this.#policy.resolve({ entity, capability: input.capability, agent: input.agent, sessionRoot, fallback: this.#fallback(input.capability) })
+      if (resolution.source !== "default") return resolution
+      entity = this.#parent(entity)
+    }
+    return resolution!
   }
 
   /** Resolves when allowed (after prompting for **ask**); rejects when denied or the user declines. */

@@ -174,3 +174,13 @@ test("prompts carry the agent so 'Allow always' knows the row", async () => {
   await bridge.check({ sessionID: "root", agent: "plan", capability: "ssh", entities: ["web"], metadata: { command: "ssh web" } })
   assert.deepEqual(prompts[0]!.metadata, { command: "ssh web", agent: "plan" })
 })
+
+test("child entities inherit unset cells from their parent", async () => {
+  const policy = await PolicyStore.open(await scratch())
+  const bridge = new PermissionBridge({ plugin: "oc-test", policy, root: async id => id, fallback: () => "allow", parent: e => e.includes("@") ? e.split("@")[0] : undefined })
+  await policy.setCells([{ entity: "work", row: { agent: "*" }, capability: "push", effect: "ask" }])
+  assert.equal((await bridge.effect({ sessionID: "s", capability: "push", entity: "work@acme" })).effect, "ask")
+  await policy.setCells([{ entity: "work@acme", row: { agent: "*" }, capability: "push", effect: "deny" }])
+  assert.equal((await bridge.effect({ sessionID: "s", capability: "push", entity: "work@acme" })).effect, "deny")
+  assert.equal((await bridge.effect({ sessionID: "s", capability: "read", entity: "work@acme" })).effect, "allow")
+})
