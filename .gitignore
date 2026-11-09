@@ -1,0 +1,7 @@
+.pixi/
+node_modules/
+dist/
+.local/
+*.tgz
+.DS_Store
+.deps.lock

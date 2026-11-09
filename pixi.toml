@@ -1,0 +1,17 @@
+[workspace]
+name = "secure-kit"
+version = "0.1.0"
+description = "Shared secret vault, policy, redaction and bundle primitives for oc-* OpenCode plugins"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64"]
+
+[dependencies]
+nodejs = "24.*"
+
+[tasks]
+deps = "node scripts/deps.mjs"
+deps-update = "node scripts/deps.mjs --refresh"
+check = { cmd = "npm run check", depends-on = ["deps"] }
+build = { cmd = "npm run build", depends-on = ["deps"] }
+test = { cmd = "npm test", depends-on = ["check"] }
+pack = { cmd = "node scripts/pack.mjs", depends-on = ["build", "test"] }
