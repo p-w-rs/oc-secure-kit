@@ -151,7 +151,8 @@ export class PermissionBridge {
             }
           }
         } catch (error) { if (!controller.signal.aborted) onError?.(error) }
-        if (!controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000))
+        // Unref'd: a reconnect wait must never keep the host process alive.
+        if (!controller.signal.aborted) await new Promise(resolve => setTimeout(resolve, 1000).unref())
       }
     }
     void loop()
