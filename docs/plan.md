@@ -1,5 +1,8 @@
 # OpenCode integration plugins: plan
 
+Status: all plugins below are built and released as 1.0.0 except SAP ByD (dropped). This document records the
+original plan and design decisions; each plugin's README describes what was built.
+
 Target: OpenCode V2 2.2.6+ on macOS and Linux, with Pixi as the only project tool.
 No platform-specific services (no Keychain, libsecret, etc.). Runtime needs are
 Node built-ins (`node:crypto`, `node:fs`) and standard OpenSSH / sudo binaries.
@@ -28,15 +31,17 @@ running the same plugin.
 
 ## Plugins and layout
 
-| Folder | Purpose | Login type (initial guess, decided per plugin) |
+| Folder | Purpose | Sign-in (as built) |
 |---|---|---|
-| `secure-kit/` | Small shared library, pinned and copied into each plugin | — |
+| `oc-secure-kit/` | Shared library, packed and vendored into each plugin | — |
 | `oc-machine/` | Machines: SSH config, sudo, env vars, permission table | SSH key / agent / password / generated key |
-| `oc-github/` | Multiple GitHub accounts with per-account permissions | HTTPS OAuth+SSO, SSH key, token, `gh` CLI |
-| `oc-atlassian/` | Jira + Confluence | Cloud OAuth 2.0 (3LO) or email + API token; DC PAT |
-| `oc-runpod/` | Pods, endpoints, volumes; pods appear as machines | API key |
-| `oc-rhythms/` | Rhythms (rhythms.ai) OKRs / check-ins | TBD (API availability to investigate) |
-| `oc-sapbyd/` | SAP Business ByDesign OData | Communication user (basic auth) or OAuth SAML bearer |
+| `oc-github/` | Multiple GitHub accounts with per-account permissions | Browser (device flow) OAuth + SSO, token; SSH keys |
+| `oc-atlassian/` | Jira + Confluence | Browser OAuth via Rovo MCP (DCR + PKCE); Cloud API token; DC PAT |
+| `oc-runpod/` | Pods, serverless, storage; SSH/rsync into pods | Browser sign-in (MCP) issuing an API key; API key |
+| `oc-rhythms/` | Rhythms (rhythms.ai) OKRs, check-ins, documents | Browser OAuth via Rhythms MCP (DCR + PKCE) |
+| `oc-azure/` | Azure via the agent's own `az`; SSH into VMs | Azure CLI sign-in (browser, device code, service principal) |
+| `oc-m365/` | Outlook, Teams, OneDrive, SharePoint via Microsoft Graph | Entra ID auth code + PKCE / device code (admin consent may be required) |
+| ~~`oc-sapbyd/`~~ | Dropped: ByDesign APIs need a communication user or admin-registered OAuth client; SSO sessions are not accepted | — |
 
 Each plugin is installed, configured, stored and versioned on its own. Plugins
 never read each other's storage. When two are installed together, they cooperate
