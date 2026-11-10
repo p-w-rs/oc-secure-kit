@@ -1,6 +1,6 @@
 [workspace]
 name = "secure-kit"
-version = "0.6.0"
+version = "0.7.0"
 description = "Shared secret vault, policy, redaction and bundle primitives for oc-* OpenCode plugins"
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64"]

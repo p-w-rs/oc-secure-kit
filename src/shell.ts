@@ -23,6 +23,10 @@ export interface Supply {
   /** Secret values were supplied, so the command's output is masked. */
   readonly secrets: boolean
   readonly runDir?: RunDir
+  /** Extra patterns masked in the output (e.g. tokens the command itself prints). Applied when `secrets` is set. */
+  readonly mask?: readonly RegExp[]
+  /** Runs after the command, before its run dir is removed (e.g. to save updated credentials). Never throws. */
+  readonly onDone?: (status: "completed" | "error") => Promise<void> | void
 }
 
 interface Pending { readonly callID: string; readonly supply: Supply; readonly at: number }
@@ -51,6 +55,20 @@ export function appendNote(result: unknown, note: string, plugin: string): unkno
     copy.output = { ...(copy.output as object), output: join((copy.output as { output: string }).output) }
   }
   return copy
+}
+
+const maskText = (text: string, patterns?: readonly RegExp[]) => {
+  if (!patterns?.length || !text) return text
+  let result = text
+  for (const pattern of patterns) result = result.replace(new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`), "[REDACTED:token]")
+  return result
+}
+function maskDeep<T>(value: T, patterns: readonly RegExp[] | undefined, depth = 0): T {
+  if (!patterns?.length) return value
+  if (typeof value === "string") return maskText(value, patterns) as T
+  if (depth > 32 || value === null || typeof value !== "object") return value
+  if (Array.isArray(value)) return value.map(item => maskDeep(item, patterns, depth + 1)) as T
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, inner]) => [key, maskDeep(inner, patterns, depth + 1)])) as T
 }
 
 export const exitCode = (result: unknown): number | undefined => {
@@ -110,8 +128,10 @@ export class ShellSupplier {
     } catch (error) { this.options.warn("could not add shell values", error) }
   }
 
-  after(event: AfterEvent): void {
+  /** Masks and annotates the result synchronously, then runs the supply's onDone (awaited) and cleans up. */
+  after(event: AfterEvent): Promise<void> | void {
     if (!SHELL_TOOLS.has(event.tool)) return
+    let finish: Pending | undefined
     try {
       const pending = this.#byCall.get(event.id)
       this.#byCall.delete(event.id)
@@ -121,23 +141,31 @@ export class ShellSupplier {
           const queue = this.#pending.get(command)?.filter(item => item !== pending)
           if (queue?.length) this.#pending.set(command, queue); else this.#pending.delete(command)
         }
-        pending.supply.runDir?.removeLater()
+        finish = pending
       }
       if (event.status !== "completed") {
         if (pending?.supply.secrets && event.error instanceof Error) {
-          try { event.error.message = this.options.redactor.redact(event.error.message) } catch {}
+          try { event.error.message = maskText(this.options.redactor.redact(event.error.message), pending.supply.mask) } catch {}
         }
-        return
-      }
+      } else {
       let result = event.result
-      if (pending?.supply.secrets) result = this.options.redactor.redactDeep(result)
+      if (pending?.supply.secrets) result = maskDeep(this.options.redactor.redactDeep(result), pending.supply.mask)
       for (const note of pending?.supply.notes ?? []) result = appendNote(result, note, this.options.plugin)
       if (!pending && command && this.options.annotate) {
         const note = this.options.annotate(command, result)
         if (note) result = appendNote(result, note, this.options.plugin)
       }
       event.result = result
+      }
     } catch (error) { this.options.warn("could not finish shell values", error) }
+    if (!finish) return
+    const done = finish
+    const cleanup = () => { done.supply.runDir?.removeLater() }
+    if (!done.supply.onDone) { cleanup(); return }
+    return (async () => {
+      try { await done.supply.onDone!(event.status) } catch (error) { this.options.warn("could not save after the command", error) }
+      cleanup()
+    })()
   }
 
   #expire(): void {

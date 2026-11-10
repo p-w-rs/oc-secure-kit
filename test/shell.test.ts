@@ -50,3 +50,19 @@ test("RunDir writes private files and scripts", async () => {
   assert.equal((await stat(await run.write("s.sh", "#!/bin/sh\n", 0o700))).mode & 0o777, 0o700)
   assert.deepEqual(appendNote({ content: "" }, "n", "p"), { content: "[p] n" })
 })
+
+test("mask patterns and onDone: output masked synchronously, onDone awaited before cleanup", async () => {
+  const base = await scratch()
+  const order: string[] = []
+  const supplier = new ShellSupplier({
+    plugin: "oc-test", redactor: new Redactor(), warn: () => {},
+    prepare: async () => ({ env: {}, notes: [], secrets: true, mask: [/eyJ[\w-]+\.[\w-]+\.[\w-]+/], runDir: await RunDir.create(base), onDone: async status => { order.push(`done:${status}`) } }),
+  })
+  await supplier.before({ ...ctx("a"), input: { command: "az account get-access-token" } })
+  const event = { tool: "shell", id: "a", input: { command: "az account get-access-token" }, status: "completed" as const, result: { content: [{ type: "text", text: '{"accessToken": "eyJabc.eyJdef.sig-123"}' }] } }
+  const pending = supplier.after(event)
+  assert.deepEqual(event.result, { content: [{ type: "text", text: '{"accessToken": "[REDACTED:token]"}' }] }, "masked before any await")
+  await pending
+  assert.deepEqual(order, ["done:completed"])
+  supplier.dispose()
+})
