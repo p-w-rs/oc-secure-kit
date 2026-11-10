@@ -1,5 +1,5 @@
 /** Version of the secure-kit API, so plugins can report which vendored copy they run. */
-export const SECURE_KIT_VERSION = "0.5.1"
+export const SECURE_KIT_VERSION = "0.6.0"
 
 export { BUNDLE_FORMAT, DEFAULT_COST, MIN_PASSPHRASE_LENGTH, decryptBundle, diffRecords, encryptBundle, inspectBundle } from "./bundle.js"
 export type { BundleEnvelope, BundleHeader, DiffItem, DiffStatus, KdfParams, Migrations } from "./bundle.js"
@@ -15,6 +15,8 @@ export { RUN_DIR_GRACE_MS, RunDir } from "./rundir.js"
 export { SHELL_TOOLS, ShellSupplier, appendNote, exitCode } from "./shell.js"
 export type { ShellCaller, ShellSupplierOptions, Supply } from "./shell.js"
 export type { SecretRequest } from "./requests.js"
+export { HttpStatusError, McpClient, discoverAuth, refreshGrant, startBrowserSignIn } from "./mcpauth.js"
+export type { AuthServer, BrowserSignIn, BrowserSignInOptions, DiscoverOptions, Grant, McpCallResult, McpClientOptions, McpServerInfo, McpToolInfo, OAuthClient } from "./mcpauth.js"
 export { MAX_SECRET_BYTES, VAULT_FORMAT, Vault, fileKey, memoryKey, validName } from "./vault.js"
 export type { KeySource, SecretMeta, SecretValue } from "./vault.js"
 
