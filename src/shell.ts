@@ -4,6 +4,8 @@ import type { RunDir } from "./rundir.js"
 /** Native tools that run shell commands. */
 export const SHELL_TOOLS = new Set(["shell", "bash"])
 const PENDING_MS = 10 * 60_000
+/** How long files of commands still running when the plugin unloads are kept. */
+const DISPOSE_GRACE_MS = 30 * 60_000
 
 /** Who runs a command, and where. */
 export interface ShellCaller {
@@ -181,8 +183,12 @@ export class ShellSupplier {
     }
   }
 
+  /**
+   * Called when the plugin unloads (e.g. a config change reloads plugins). Commands that already started keep running
+   * and may still need their files (keys, askpass helpers), so those are removed later, not now.
+   */
   dispose(): void {
-    for (const pending of this.#byCall.values()) void pending.supply.runDir?.remove().catch(() => {})
+    for (const pending of this.#byCall.values()) pending.supply.runDir?.removeLater(DISPOSE_GRACE_MS)
     this.#pending.clear()
     this.#byCall.clear()
   }

@@ -52,6 +52,20 @@ test("RunDir writes private files and scripts", async () => {
   assert.deepEqual(appendNote({ content: "" }, "n", "p"), { content: "[p] n" })
 })
 
+test("dispose keeps the files of a command that is still running", async () => {
+  const base = await scratch()
+  let run: RunDir | undefined
+  const supplier = new ShellSupplier({
+    plugin: "oc-test", redactor: new Redactor(), warn: () => {},
+    prepare: async () => { run = await RunDir.create(base); await run.write("key", "k"); return { env: { K: run.file("key") }, notes: [], secrets: true, runDir: run } },
+  })
+  await supplier.before({ ...ctx("long"), input: { command: "git push" } })
+  supplier.create({ command: "git push", env: {} })
+  supplier.dispose()
+  await new Promise(resolve => setTimeout(resolve, 50))
+  assert.equal((await stat(run!.file("key"))).isFile(), true, "the running command can still read its key after a plugin reload")
+})
+
 test("RunDir.sweep keeps directories of a live process, removes stale ones of dead or unknown owners", async () => {
   const base = await scratch()
   const live = await RunDir.create(base)
