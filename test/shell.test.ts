@@ -1,6 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { readdir, stat } from "node:fs/promises"
+import { readdir, rm, stat, utimes, writeFile } from "node:fs/promises"
+import { basename } from "node:path"
 import { Redactor } from "../src/redact.js"
 import { RunDir } from "../src/rundir.js"
 import { ShellSupplier, appendNote } from "../src/shell.js"
@@ -49,6 +50,23 @@ test("RunDir writes private files and scripts", async () => {
   assert.equal((await stat(await run.write("a/b.txt", "x"))).mode & 0o777, 0o600)
   assert.equal((await stat(await run.write("s.sh", "#!/bin/sh\n", 0o700))).mode & 0o777, 0o700)
   assert.deepEqual(appendNote({ content: "" }, "n", "p"), { content: "[p] n" })
+})
+
+test("RunDir.sweep keeps directories of a live process, removes stale ones of dead or unknown owners", async () => {
+  const base = await scratch()
+  const live = await RunDir.create(base)
+  const dead = await RunDir.create(base)
+  await writeFile(dead.file(".owner"), "2147483646")
+  const legacy = await RunDir.create(base)
+  await rm(legacy.file(".owner"))
+  const fresh = await RunDir.create(base)
+  await Promise.all([live, dead, legacy].map(run => utimes(run.path, new Date(Date.now() - 16 * 60_000), new Date(Date.now() - 16 * 60_000))))
+  await RunDir.sweep(base, Date.now())
+  const left = await readdir(base)
+  assert.ok(left.includes(basename(live.path)), "live owner kept (a long command may still use it)")
+  assert.ok(left.includes(basename(fresh.path)), "recent kept")
+  assert.ok(!left.includes(basename(dead.path)), "dead owner removed")
+  assert.ok(!left.includes(basename(legacy.path)), "no owner removed")
 })
 
 test("mask patterns and onDone: output masked synchronously, onDone awaited before cleanup", async () => {
