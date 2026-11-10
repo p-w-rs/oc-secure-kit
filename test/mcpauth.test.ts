@@ -10,6 +10,7 @@ async function fakeServer() {
   const tokens = new Set<string>()
   const refresh = new Set<string>()
   const sessions = new Set<string>()
+  const registered: (string | undefined)[] = []
   let base = ""
   const read = async (req: IncomingMessage) => { const chunks: Buffer[] = []; for await (const c of req) chunks.push(c as Buffer); return Buffer.concat(chunks).toString() }
   const send = (res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) => { res.writeHead(status, { "content-type": "application/json", ...headers }); res.end(JSON.stringify(body)) }
@@ -18,7 +19,7 @@ async function fakeServer() {
     const url = new URL(req.url!, base)
     if (url.pathname === "/.well-known/oauth-protected-resource/app/mcp") return send(res, 200, { resource: `${base}/app/mcp`, authorization_servers: [`${base}/accounts/`], scopes_supported: [] })
     if (url.pathname === "/accounts/.well-known/openid-configuration") return send(res, 200, { authorization_endpoint: `${base}/accounts/authorize`, token_endpoint: `${base}/accounts/token`, registration_endpoint: `${base}/accounts/register`, scopes_supported: ["openid", "email", "offline_access"] })
-    if (url.pathname === "/accounts/register") { const body = JSON.parse(await read(req)); return send(res, 201, { client_id: "c1", redirect_uris: body.redirect_uris }) }
+    if (url.pathname === "/accounts/register") { const body = JSON.parse(await read(req)); registered.push(body.scope); return send(res, 201, { client_id: "c1", redirect_uris: body.redirect_uris }) }
     if (url.pathname === "/accounts/authorize") {
       const p = url.searchParams
       assert.equal(p.get("scope"), "openid offline_access")
@@ -48,7 +49,7 @@ async function fakeServer() {
   })
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve))
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
-  return { mcp: `${base}/app/mcp`, sessions, tokens, stop: () => new Promise(resolve => server.close(resolve)) }
+  return { mcp: `${base}/app/mcp`, sessions, tokens, registered, stop: () => new Promise(resolve => server.close(resolve)) }
 }
 
 test("MCP browser sign-in: discovery, public client, PKCE, refresh, calls", async () => {
@@ -77,5 +78,9 @@ test("MCP browser sign-in: discovery, public client, PKCE, refresh, calls", asyn
     const cancelled = await startBrowserSignIn(fake.mcp, { clientName: "test", scopes })
     cancelled.cancel()
     await assert.rejects(cancelled.done, /cancelled/)
+    const withScopes = await startBrowserSignIn(fake.mcp, { clientName: "test", scopes, registerScopes: true })
+    withScopes.cancel()
+    await withScopes.done.catch(() => {})
+    assert.deepEqual(fake.registered, [undefined, undefined, "openid offline_access"], "scopes are registered only when asked")
   } finally { await fake.stop() }
 })

@@ -123,6 +123,8 @@ export interface BrowserSignInOptions extends DiscoverOptions {
   readonly timeoutMs?: number
   /** Extra authorization parameters, e.g. { prompt: "consent" }. */
   readonly authorizeParams?: Record<string, string>
+  /** Also send the requested scopes when registering the client (some servers limit a client to its registered scopes). */
+  readonly registerScopes?: boolean
 }
 
 /** Starts a browser sign-in as a public client. Works with any identity provider the server offers (SSO etc.). */
@@ -136,7 +138,7 @@ export async function startBrowserSignIn(mcp: string, options: BrowserSignInOpti
   try {
     const registration = await json(await fetch(auth.registrationEndpoint, {
       method: "POST", headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ client_name: options.clientName, redirect_uris: [redirectUri], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" }),
+      body: JSON.stringify({ client_name: options.clientName, redirect_uris: [redirectUri], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none", ...(options.registerScopes && auth.scopes.length && { scope: auth.scopes.join(" ") }) }),
     }), `${service} client registration`)
     if (!registration.client_id) throw new Error(`${service} refused the sign-in client: ${registration.error_description ?? registration.error ?? "no client id"}`)
     clientId = String(registration.client_id)
