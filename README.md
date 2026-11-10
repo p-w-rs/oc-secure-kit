@@ -9,7 +9,7 @@ pixi run --locked test     # typecheck + tests
 pixi run --locked pack     # -> .local/pack/oc-secure-kit-<version>.tgz (+ sha256)
 ```
 
-Then in a plugin: `pixi run vendor-kit ../secure-kit/.local/pack/oc-secure-kit-<version>.tgz && pixi run deps-update`.
+Then in a plugin: `pixi run vendor-kit ../oc-secure-kit/.local/pack/oc-secure-kit-<version>.tgz && pixi run deps-update`.
 
 ## Modules
 
