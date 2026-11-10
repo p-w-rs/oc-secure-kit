@@ -1,4 +1,4 @@
-# secure-kit
+# oc-secure-kit
 
 Shared building blocks for the `oc-*` OpenCode plugins. Node built-ins only;
 macOS and Linux. This is a library, not a plugin: each plugin vendors a packed
@@ -21,6 +21,8 @@ Then in a plugin: `pixi run vendor-kit ../oc-secure-kit/.local/pack/oc-secure-ki
 | `redact` | `Redactor` + `installRedaction`: masks secrets in tool results (URL/JSON/hex encodings, base64 at any alignment). Scoped to the plugin's own tools by default; `"all"` (native tools too) is opt-in. Never throws. |
 | `bundle` | `encryptBundle`/`decryptBundle`: portable export files (scrypt + AES-256-GCM, authenticated header, bounded KDF cost, version migrations). `inspectBundle` reads the header without a passphrase; `diffRecords` builds import previews. |
 | `requests` | `SecretRequests`: the agent asks for a secret; the user enters it in the GUI. Stores no secret material. |
+| `shell` | `ShellSupplier`: supplies values (env, a per-command run dir) to the agent's native shell commands that reference them, masks their output (redactor plus extra patterns), appends notes, and runs an `onDone` hook. `RunDir`: private per-command directories with a grace-period sweep. |
+| `mcpauth` | Browser sign-in to remote MCP servers (protected-resource and authorization-server metadata, dynamic client registration as a public client, PKCE, loopback callback, resource indicators, refresh) and `McpClient`, a minimal Streamable-HTTP MCP client (sessions, 401 retry, expired-session renewal). |
 
 All files live in the plugin's data directory (`pluginDataDir`: `$XDG_DATA_HOME/<plugin>`,
 default `~/.local/share/<plugin>`), created with mode 0700/0600.

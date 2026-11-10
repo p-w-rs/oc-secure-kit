@@ -1,5 +1,5 @@
 /** Version of the secure-kit API, so plugins can report which vendored copy they run. */
-export const SECURE_KIT_VERSION = "0.7.0"
+export const SECURE_KIT_VERSION = "1.0.0"
 
 export { BUNDLE_FORMAT, DEFAULT_COST, MIN_PASSPHRASE_LENGTH, decryptBundle, diffRecords, encryptBundle, inspectBundle } from "./bundle.js"
 export type { BundleEnvelope, BundleHeader, DiffItem, DiffStatus, KdfParams, Migrations } from "./bundle.js"
